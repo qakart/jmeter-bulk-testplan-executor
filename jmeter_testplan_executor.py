@@ -118,6 +118,8 @@ class JMeterTestExecutor(object):
         #for ${num_threads} threads:
             #for ${var} times:
                 #POST msg
+    SSH_TIMEOUT = 180
+    JMETER_TIMEOUT = 5400  # 1.5 hours
 
     EXECUTION_STEPS = (
         (20, 10),  # approx 10k requests
@@ -153,19 +155,23 @@ class JMeterTestExecutor(object):
 
     def _execute_shh_command_remotely(self, cmd, verify_message):
         params = ["ssh", "%s" % HOST_MACHINE, cmd]
-        proc = subprocess.Popen(params,
-                                shell=False,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-        print_cyan("Execute ssh command: " + ' '.join(params))
-        proc.wait()
-        result = proc.stdout.readlines()
-        if result == []:
-            error = proc.stderr.readlines()
-            print >> sys.stderr, "ERROR: %s" % error
-        else:
-            print_cyan("Server result" + ' '.join(result))
-            assert verify_message in ' '.join(result)
+        max_tries = 10
+        try_count = 0
+        while try_count < max_tries:
+            print_cyan("Execute ssh command: " + ' '.join(params))
+            proc = subprocess.Popen(params,
+                                    shell=False,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            self._wait_for_process(proc, self.SSH_TIMEOUT)
+            result = proc.stdout.readlines()
+            if result == []:
+                error = proc.stderr.readlines()
+                print_red("ERROR: %s" % error)
+                sleep(10)
+            else:
+                print_cyan("Server result: " + ' '.join(result))
+                break
 
     def is_client_up(self):
         #check that web service is up after restart
@@ -178,16 +184,21 @@ class JMeterTestExecutor(object):
             return False
 
     def _wait_for_server_to_start(self):
-        print_green("Waiting for service to start...")
-        try_count = 30
+        print_green("Waiting for scada to start...")
+        try_count = 90
         attempts = 1
+        is_service_up = False
         while attempts <= try_count:
-            if self.is_client_up() is True:
+            if self.is_scada_service_up() is True:
                 print_green("Server is back!")
+                is_service_up = True
                 break
             print_green("\t...waiting 10 seconds....")
             sleep(10)
             attempts += 1
+        if is_service_up is False:
+            print_red("Server has not stated after timeout :(")
+
 
     def start_service(self):
         print_green("Starting service...")
@@ -203,6 +214,25 @@ class JMeterTestExecutor(object):
         print_green("Restarting service")
         self.stop_service()
         self.start_service()
+    
+    def _wait_for_process(self, proc, timeout):
+        """return True if process finished alone
+        return False if process was killed"""
+        wait_time = 0
+        while wait_time < timeout:
+            print "proces poll", proc.poll()
+            if proc.poll() is not None:
+                return proc.returncode == 0
+            wait_time += 1
+            sleep(1)
+        else:
+            pids = subprocess.check_output("ps axu | grep  jmeter | grep -v grep  | awk '{print $2}'", shell=True)
+            print_yellow("Killing jmeter due to timeout")
+            for p in pids.split():
+                print_yellow("Killing jmeter due to timeout")
+                os.kill(int(p.strip()), signal.SIGKILL)
+            return False
+
 
     def _run_jmeter(self, test_plan, report_path, thread_count, loop_count, dashboard_output_dir):
         try:
@@ -219,13 +249,22 @@ class JMeterTestExecutor(object):
                       dashboard_output_dir,
                       ]
 
-            print_magenta("Execute command: " + ' '.join(params))
-            proc = subprocess.Popen(params, cwd=self._jmeter_dir)
-            proc.wait()
-            if proc.returncode != 0:
-                raise ExecutionException("JMeter run did not run correctly for:\n" + ' '.join(params))
-        except:
-            raise ExecutionException
+            try:
+                try_count = 2
+                attempts = 1
+                while attempts <= try_count:
+                    print_magenta("Execute command: " + ' '.join(params))
+                    proc = subprocess.Popen(params, cwd=self._jmeter_dir)
+                    was_process_successful = self._wait_for_process(proc, self.JMETER_TIMEOUT)
+                    if was_process_successful is True:
+                        break
+                    else:
+                        self.restart_scada()
+                    attempts += 1
+            except Exception:
+                raise  # ExecutionException(e)
+            except:
+                raise ExecutionException
 
     def _calculate_requests(self, threads, loops):
         return threads * loops * self.BOTS_NUMBER
