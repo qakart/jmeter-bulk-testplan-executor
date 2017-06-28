@@ -22,18 +22,11 @@ JMETER_DIR = "/Users/pavel.nenov/Downloads/apache-jmeter-3.2/bin"
 
 SCRIPT_PATH = os.path.abspath(os.path.dirname(__file__))
 
-TMP_DASHBOARD_DIR = os.path.join(SCRIPT_PATH, "tmp_dashboard")
-
 
 def get_options():
     usage = "Run jmeter performance tests."
     parser = OptionParser(usage=usage)
-    # # required
-    # parser.add_option("-n", "--thread_num",
-    #                   help="Required. The number of users/threads for the test execution")
-    # # required
-    # parser.add_option("-l", "--loop_num",
-    #                   help="Required. The number of loops fo requests per thread. Used to prevent the generation of too many threads.")
+
     # optional
     parser.add_option("-t", "--testplan-dir",
                       help="The directory where the test plans for execution are stored. Default: 'testplans'",
@@ -68,13 +61,10 @@ def clean_dir(directory):
 
 
 def prepare_dirs(opts):
-    clean_dir(TMP_DASHBOARD_DIR)
     if not os.path.exists(opts.reports_dir):
         os.makedirs(opts.reports_dir)
     if not os.path.exists(opts.dashboards_dir):
         os.makedirs(opts.dashboards_dir)
-    if not os.path.exists(TMP_DASHBOARD_DIR):
-        os.makedirs(TMP_DASHBOARD_DIR)
 
 
 class bcolors:
@@ -214,7 +204,7 @@ class JMeterTestExecutor(object):
         self.stop_service()
         self.start_service()
 
-    def _run_jmeter(self, test_plan, report_path, thread_count, loop_count):
+    def _run_jmeter(self, test_plan, report_path, thread_count, loop_count, dashboard_output_dir):
         try:
             params = ["./jmeter.sh",
                       "-n",
@@ -226,7 +216,7 @@ class JMeterTestExecutor(object):
                       report_path,
                       "-e",
                       "-o",
-                      TMP_DASHBOARD_DIR,
+                      dashboard_output_dir,
                       ]
 
             print_magenta("Execute command: " + ' '.join(params))
@@ -254,24 +244,14 @@ class JMeterTestExecutor(object):
                                                "report_%s_%s_%d.csv" % (report_timestamp, test_plan_name, requests_num))
 
                     try:
-                        self._run_jmeter(test_plan_path, report_path, threads, loops)
+                        dashboard_output_dir = os.path.join(os.path.abspath(os.path.basename(__file__)),
+                                                                   self._dashboards_dir, "%s_%s_%d" % (
+                                                                       test_plan_name, report_timestamp, requests_num))
+                        self._run_jmeter(test_plan_path, report_path, threads, loops, dashboard_output_dir)
                     except ExecutionException as e:
                         print_red(traceback.format_exc(e))
                         raise
                     except Exception as e:
-                        print_red("Unknown error")
-                        raise
-
-                    try:
-                        testplan_dashboard_dest_dir = os.path.join(os.path.abspath(os.path.basename(__file__)),
-                                                                   self._dashboards_dir, "%s_%s_%d" % (
-                                                                       test_plan_name, report_timestamp, requests_num))
-                        print_cyan("Move from %s to %s" % (TMP_DASHBOARD_DIR, testplan_dashboard_dest_dir))
-                        shutil.copytree(TMP_DASHBOARD_DIR, testplan_dashboard_dest_dir)
-                        clean_dir(TMP_DASHBOARD_DIR)
-                    except ExecutionException:
-                        raise  # ExecutionException(e)
-                    except Exception:
                         print_red("Unknown error")
                         raise
 
