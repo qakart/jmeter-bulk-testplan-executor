@@ -115,9 +115,9 @@ class JMeterTestExecutor(object):
 
     #this assumes that the JMeter test plan has jvm paramets for (threads, loops - times the same request is sent over and over again)
     #structure in jmeter:
-        #for ${num_threads} threads:
-            #for ${var} times:
-                #POST msg
+    #for ${num_threads} threads:
+    #for ${var} times:
+    #POST msg
     SSH_TIMEOUT = 180
     JMETER_TIMEOUT = 5400  # 1.5 hours
 
@@ -214,7 +214,7 @@ class JMeterTestExecutor(object):
         print_green("Restarting service")
         self.stop_service()
         self.start_service()
-    
+
     def _wait_for_process(self, proc, timeout):
         """return True if process finished alone
         return False if process was killed"""
@@ -284,8 +284,8 @@ class JMeterTestExecutor(object):
 
                     try:
                         dashboard_output_dir = os.path.join(os.path.abspath(os.path.basename(__file__)),
-                                                                   self._dashboards_dir, "%s_%s_%d" % (
-                                                                       test_plan_name, report_timestamp, requests_num))
+                                                            self._dashboards_dir, "%s_%s_%d" % (
+                                                                test_plan_name, report_timestamp, requests_num))
                         self._run_jmeter(test_plan_path, report_path, threads, loops, dashboard_output_dir)
                     except ExecutionException as e:
                         print_red(traceback.format_exc(e))
