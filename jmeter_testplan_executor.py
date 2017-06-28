@@ -263,8 +263,8 @@ class JMeterTestExecutor(object):
                     attempts += 1
             except Exception:
                 raise  # ExecutionException(e)
-            except:
-                raise ExecutionException
+        except:
+            raise ExecutionException
 
     def _calculate_requests(self, threads, loops):
         return threads * loops * self.BOTS_NUMBER
